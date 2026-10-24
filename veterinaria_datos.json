@@ -1,0 +1,21 @@
+{
+    "propietarios": [
+        {
+            "nombre": "isac",
+            "telefono": "325365787",
+            "direccion": "calle 30 #11-98"
+        }
+    ],
+    "mascotas": [
+        {
+            "tipo": "Perro",
+            "id_mascotas": "01",
+            "nombre": "pichi",
+            "edad": 4,
+            "propietario_nombre": "isac",
+            "raza": "salchicha",
+            "tamanio": "Mediano"
+        }
+    ],
+    "tratamientos": []
+}

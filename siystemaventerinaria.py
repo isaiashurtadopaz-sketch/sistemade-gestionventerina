@@ -1,4 +1,9 @@
 from abc import ABC, abstractmethod
+import json
+import os
+
+# Archivo donde se guardarán los datos
+ARCHIVO_DATOS = "veterinaria_datos.json"
 
 # 1. Clase Propietario
 class Propietario:
@@ -10,6 +15,14 @@ class Propietario:
     def mostra_informacion(self):
         print(f"Propietario: {self.nombre} | Tel: {self.telefono} | Dirección: {self.direccion}")
 
+    def to_dict(self):
+        """Convierte el objeto a diccionario para guardarlo en JSON"""
+        return {
+            "nombre": self.nombre,
+            "telefono": self.telefono,
+            "direccion": self.direccion
+        }
+
 
 # 2. Clase Base (Abstracta) Mascota
 class Mascota(ABC):
@@ -17,10 +30,14 @@ class Mascota(ABC):
         self.id_mascotas = id_mascotas
         self.nombre = nombre
         self.edad = edad
-        self.propietario = propietario  # Objeto Propietario asociado
+        self.propietario = propietario  # Objeto Propietario
 
     @abstractmethod
     def emitir_sonido(self):
+        pass
+
+    @abstractmethod
+    def to_dict(self):
         pass
 
 
@@ -34,6 +51,17 @@ class Perros(Mascota):
     def emitir_sonido(self):
         print("¡Guau guau!")
 
+    def to_dict(self):
+        return {
+            "tipo": "Perro",
+            "id_mascotas": self.id_mascotas,
+            "nombre": self.nombre,
+            "edad": self.edad,
+            "propietario_nombre": self.propietario.nombre, # Guardamos el nombre para enlazarlo
+            "raza": self.raza,
+            "tamanio": self.tamanio
+        }
+
 
 class Gatos(Mascota):
     def __init__(self, id_mascotas, nombre, edad, propietario, color_pelaje, es_esterilizado):
@@ -43,6 +71,17 @@ class Gatos(Mascota):
 
     def emitir_sonido(self):
         print("¡Miau miau!")
+
+    def to_dict(self):
+        return {
+            "tipo": "Gato",
+            "id_mascotas": self.id_mascotas,
+            "nombre": self.nombre,
+            "edad": self.edad,
+            "propietario_nombre": self.propietario.nombre,
+            "color_pelaje": self.color_pelaje,
+            "es_esterilizado": self.es_esterilizado
+        }
 
 
 # 4. Clase Tratamiento
@@ -56,15 +95,23 @@ class Tratamiento:
     def mostrar_tratamiento(self):
         print(f"Tratamiento [{self.codigo}]: {self.descripcion} | Meds: {self.medicamentos} | Costo: ${self.costo:,.0f}")
 
+    def to_dict(self):
+        return {
+            "codigo": self.codigo,
+            "descripcion": self.descripcion,
+            "medicamentos": self.medicamentos,
+            "costo": self.costo
+        }
+
 
 # 5. Clase CitaVeterinaria
 class CitaVeterinaria:
-    def __init__(self, id_cita, fecha, motivo_consulta, mascota):
+    def __init__(self, id_cita, fecha, motivo_consulta, mascota, tratamiento=None):
         self.id_cita = id_cita
         self.fecha = fecha
         self.motivo_consulta = motivo_consulta
         self.mascota = mascota
-        self.tratamiento = None  # Se asigna después
+        self.tratamiento = tratamiento
 
     def asignar_tratamiento(self, tratamiento):
         self.tratamiento = tratamiento
@@ -99,14 +146,63 @@ class CitaVeterinaria:
 
 
 # ==========================================
-# 6. PROGRAMA PRINCIPAL (MENÚ INTERACTIVO)
+# FUNCIONES DE GUARDADO Y CARGA (JSON)
 # ==========================================
-def main():
-    # Listas para almacenar los datos en memoria
+def guardar_datos(lista_propietarios, lista_mascotas, lista_tratamientos):
+    datos = {
+        "propietarios": [p.to_dict() for p in lista_propietarios],
+        "mascotas": [m.to_dict() for m in lista_mascotas],
+        "tratamientos": [t.to_dict() for t in lista_tratamientos]
+    }
+    with open(ARCHIVOS_DATOS := ARCHIVO_DATOS, "w", encoding="utf-8") as f:
+        json.dump(datos, f, ensure_ascii=False, indent=4)
+
+def cargar_datos():
     lista_propietarios = []
     lista_mascotas = []
     lista_tratamientos = []
-    lista_citas = []
+
+    if not os.path.exists(ARCHIVO_DATOS):
+        return lista_propietarios, lista_mascotas, lista_tratamientos
+
+    try:
+        with open(ARCHIVO_DATOS, "r", encoding="utf-8") as f:
+            datos = json.load(f)
+
+            # Cargar propietarios
+            for p_data in datos.get("propietarios", []):
+                prop = Propietario(p_data["nombre"], p_data["telefono"], p_data["direccion"])
+                lista_propietarios.append(prop)
+
+            # Cargar mascotas y enlazar con su propietario
+            for m_data in datos.get("mascotas", []):
+                # Buscar el objeto Propietario por su nombre
+                prop_asociado = next((p for p in lista_propietarios if p.nombre == m_data["propietario_nombre"]), None)
+                if prop_asociado:
+                    if m_data["tipo"] == "Perro":
+                        mascota = Perros(m_data["id_mascotas"], m_data["nombre"], m_data["edad"], prop_asociado, m_data["raza"], m_data["tamanio"])
+                    else:
+                        mascota = Gatos(m_data["id_mascotas"], m_data["nombre"], m_data["edad"], prop_asociado, m_data["color_pelaje"], m_data["es_esterilizado"])
+                    lista_mascotas.append(mascota)
+
+            # Cargar tratamientos
+            for t_data in datos.get("tratamientos", []):
+                trat = Tratamiento(t_data["codigo"], t_data["descripcion"], t_data["medicamentos"], t_data["costo"])
+                lista_tratamientos.append(trat)
+
+    except Exception as e:
+        print(f"[!] Error al cargar los datos guardados: {e}")
+
+    return lista_propietarios, lista_mascotas, lista_tratamientos
+
+
+# ==========================================
+# 6. PROGRAMA PRINCIPAL (MENÚ INTERACTIVO)
+# ==========================================
+def main():
+    # Cargar datos guardados previamente en el archivo JSON
+    lista_propietarios, lista_mascotas, lista_tratamientos = cargar_datos()
+    lista_citas = [] # Las citas se pueden mantener en sesión o guardar igual si lo deseas
 
     while True:
         print("\n*** SISTEMA DE GESTIÓN VETERINARIA ***")
@@ -114,10 +210,11 @@ def main():
         print("2. Registrar Mascota (Perro o Gato)")
         print("3. Registrar Tratamiento")
         print("4. Agendar Cita Veterinaria y Asignar Tratamiento")
-        print("5. Mostrar Resumen de todas las Citas")
-        print("6. Salir")
+        print("5. Ver Historial General (Todas las Citas)")
+        print("6. Ver Listado de Propietarios y Mascotas Guardados")
+        print("7. Salir")
         
-        opcion = input("Seleccione una opción (1-6): ").strip()
+        opcion = input("Seleccione una opción (1-7): ").strip()
 
         if opcion == "1":
             print("\n--- Registro de Propietario ---")
@@ -127,7 +224,8 @@ def main():
             
             nuevo_prop = Propietario(nombre, telefono, direccion)
             lista_propietarios.append(nuevo_prop)
-            print("¡Propietario registrado con éxito!")
+            guardar_datos(lista_propietarios, lista_mascotas, lista_tratamientos)
+            print("¡Propietario registrado y guardado con éxito!")
 
         elif opcion == "2":
             if not lista_propietarios:
@@ -161,14 +259,16 @@ def main():
                 tamanio = input("Tamaño (Pequeño, Mediano, Grande): ")
                 nueva_mascota = Perros(id_mascota, nombre, edad, propietario_seleccionado, raza, tamanio)
                 lista_mascotas.append(nueva_mascota)
-                print("¡Perro registrado con éxito!")
+                guardar_datos(lista_propietarios, lista_mascotas, lista_tratamientos)
+                print("¡Perro registrado y guardado con éxito!")
             elif tipo == "2":
                 color_pelaje = input("Color de pelaje: ")
                 esterilizado_str = input("¿Está esterilizado? (s/n): ").lower()
                 es_esterilizado = True if esterilizado_str == 's' else False
                 nueva_mascota = Gatos(id_mascota, nombre, edad, propietario_seleccionado, color_pelaje, es_esterilizado)
                 lista_mascotas.append(nueva_mascota)
-                print("¡Gato registrado con éxito!")
+                guardar_datos(lista_propietarios, lista_mascotas, lista_tratamientos)
+                print("¡Gato registrado y guardado con éxito!")
             else:
                 print("[!] Tipo de mascota no válido.")
 
@@ -185,7 +285,8 @@ def main():
 
             nuevo_tratamiento = Tratamiento(codigo, descripcion, medicamentos, costo)
             lista_tratamientos.append(nuevo_tratamiento)
-            print("¡Tratamiento registrado con éxito!")
+            guardar_datos(lista_propietarios, lista_mascotas, lista_tratamientos)
+            print("¡Tratamiento registrado y guardado con éxito!")
 
         elif opcion == "4":
             if not lista_mascotas:
@@ -210,7 +311,6 @@ def main():
 
             nueva_cita = CitaVeterinaria(id_cita, fecha, motivo, mascota_seleccionada)
 
-            # Asignar tratamiento opcional
             if lista_tratamientos:
                 asociar_t = input("¿Desea asignar un tratamiento ya registrado? (s/n): ").lower()
                 if asociar_t == 's':
@@ -221,23 +321,34 @@ def main():
                         idx_t = int(input("Seleccione el número del tratamiento: "))
                         nueva_cita.asignar_tratamiento(lista_tratamientos[idx_t])
                     except (ValueError, IndexError):
-                        print("[!] Selección de tratamiento inválida. Se dejará pendiente.")
+                        print("[!] Selección inválida. Se dejará pendiente.")
 
             lista_citas.append(nueva_cita)
             print("¡Cita agendada con éxito!")
 
         elif opcion == "5":
             if not lista_citas:
-                print("\n[!] No hay citas registradas en el sistema.")
+                print("\n[!] No hay citas registradas en esta sesión.")
             else:
                 for cita in lista_citas:
                     cita.mostrar_resumen_cita()
 
         elif opcion == "6":
+            print("\n--- REGISTROS GUARDADOS EN EL SISTEMA ---")
+            print(f"\n[Propietarios ({len(lista_propietarios)}):]")
+            for p in lista_propietarios:
+                p.mostra_informacion()
+                
+            print(f"\n[Mascotas ({len(lista_mascotas)}):]")
+            for m in lista_mascotas:
+                tipo = type(m).__name__
+                print(f"- {m.nombre} ({tipo}) | Edad: {m.edad} años | Dueño: {m.propietario.nombre}")
+
+        elif opcion == "7":
             print("\nSaliendo del sistema de gestión veterinaria. ¡Hasta luego!")
             break
         else:
-            print("\n[!] Opción no válida. Por favor, elija un número del 1 al 6.")
+            print("\n[!] Opción no válida. Elija un número del 1 al 7.")
 
 if __name__ == "__main__":
     main()
